@@ -13,49 +13,31 @@ import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 
+// class that manages a client's connection and processes requests in a separate thread.
+// server creates and runs a thread of this class type when a client initiates connection
+class ClientRequestProcessor implements Runnable {
 
-public class FtpServer {
-    
-    private int                     port     = 8000;      // port on which the server accepts connections
-    private ServerSocket            server;               // server object to accept connections
     private Socket                  socket;               // server side socket
     private ObjectInputStream       inputStream;          // stream to receive data from client
     private ObjectOutputStream      outputStream;         // stream to send data to client
 
-    public FtpServer() {
+
+    public ClientRequestProcessor(Socket socket) throws Exception {
+
+        this.socket             = socket;
+        this.outputStream       = new ObjectOutputStream(socket.getOutputStream());
+        outputStream.flush();
+        this.inputStream        = new ObjectInputStream(socket.getInputStream());
+
+        System.out.println("Connected to: " + socket.getInetAddress().getHostAddress());
+        
     }
-    
-    // initializes the server on localhost and the given port
-    public boolean init(String[] args) {
+
+
+    @Override
+    public void run() {
 
         try {
-            if (args.length == 1) {
-                this.port = Integer.parseInt(args[0]);
-            }
-            server = new ServerSocket(this.port, 10, InetAddress.getLoopbackAddress());
-        } catch (Exception e) {
-            e.printStackTrace();
-            return false;
-        }
-
-        return true;
-
-    }
-
-    // server functions for uploading and receiving files from client
-    public void run() throws Exception {
-
-        while (true) {
-
-            // initial setup for the current connection
-            socket          = server.accept();
-            outputStream    = new ObjectOutputStream(socket.getOutputStream());
-            outputStream.flush();
-            inputStream     = new ObjectInputStream(socket.getInputStream());
-            
-
-            System.out.println("Connected to: " + socket.getInetAddress().getHostAddress());
-
             while (true) {
                 System.out.println("Waiting for request from client.");
 
@@ -65,7 +47,6 @@ public class FtpServer {
                     request = (FtpRequest) inputStream.readObject();
                 } catch (EOFException eofException) {
                     System.out.println("Client closed connection.");
-                    System.out.println("Server is ready to accept connections on port: " + this.port);
                     break;
                 }
                 if (request != null) {
@@ -110,6 +91,53 @@ public class FtpServer {
             inputStream.close();
             outputStream.close();
 
+        } catch (Exception e) {
+            System.out.println("Exception occured in client thread." + e);
+            e.printStackTrace();
+        }
+    }
+}
+
+// server class that accepts connections and spawns a thread for each client
+public class FtpServer {
+    
+    private int                     port     = 8000;      // port on which the server accepts connections
+    private ServerSocket            server;               // server object to accept connections
+
+    public FtpServer() {
+    }
+    
+    // initializes the server on localhost and the given port
+    public boolean init(String[] args) {
+
+        try {
+            if (args.length == 1) {
+                this.port = Integer.parseInt(args[0]);
+            }
+            server = new ServerSocket(this.port, 10, InetAddress.getLoopbackAddress());
+        } catch (Exception e) {
+            e.printStackTrace();
+            return false;
+        }
+
+        return true;
+
+    }
+
+    // server functions for uploading and receiving files from client
+    public void start() throws Exception {
+
+        while (true) {
+
+            // accept a connection from client
+            Socket socket          = server.accept();
+
+            // spawn request processor thread for this connection
+            Thread processorThread = new Thread(new ClientRequestProcessor(socket));
+
+            // start the thread
+            processorThread.start();
+
         }
 
     }
@@ -129,16 +157,13 @@ public class FtpServer {
             }
 
             // server is ready to process client requests
-            server.run();
+            server.start();
 
         } catch (Exception e) {
             System.out.println("Unexpected exception on server. ");
             e.printStackTrace();
         } finally {
             try {
-                server.inputStream.close();
-                server.outputStream.close();
-                server.socket.close();
                 server.server.close();
             } catch(IOException ioEx) {
                 System.out.println("Errored while closing connections.");

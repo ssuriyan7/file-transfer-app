@@ -150,6 +150,7 @@ public class FtpClient {
         if (parts.length != 2) {
             if (parts.length == 1 && "exit".equals(parts[0])) {
                 result = true;
+                return result;
             } else {
                 System.out.println("Invalid command.");
                 result = false;
@@ -158,6 +159,7 @@ public class FtpClient {
             System.out.println("Invalid action.");
             result = false;
         } 
+
         File file = new File(parts[1]);
         if (!file.exists()) {
             System.out.println("Input file does not exist.");
